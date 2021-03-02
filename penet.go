@@ -123,7 +123,7 @@ func (u *UdpSend) send(nowTime time.Time, buf []byte) {
 		}
 		index := (i + u.dataBegin) % len(u.data)
 		d := &u.data[index]
-		if d.Acked == false && now-d.Time >= uint32(u.rtt*1.2) {
+		if d.Acked == false && now-d.Time >= uint32(u.rtt*2.0) {
 			log.Debugf("resend, seq:%v id:%v rtt:%v name:%v", d.Seq, u.Id, uint32(u.rtt), u.name)
 			// data包:  type0 flag1 id2 len3 seq4 tm5 sndwnd6
 			// 发送窗口就是配置值，其实发送窗口不需要发送出去
@@ -259,11 +259,11 @@ func (u *UdpSend) recv(buf []byte) {
 			log.Debugf("2 acked ok:%v, id:%v %v", u.acked, u.Id, u.name)
 		}
 		if u.dataLen > 0 {
-			firstSeq = u.data[u.dataBegin].Seq
+			curSeq := u.data[u.dataBegin].Seq
 			// var ackedSeq = []uint32{}
 			for i := headLen; i < len(buf); i += 4 {
 				seq := binary.BigEndian.Uint32(buf[i:])
-				offset := int(int32(seq - firstSeq))
+				offset := int(int32(seq - curSeq))
 				if offset < 0 || offset >= u.dataLen {
 					continue
 				}
@@ -305,8 +305,11 @@ func (u *UdpSend) recv(buf []byte) {
 		sendTime := uint32(head[4])
 		rtt := now - sendTime
 		if rtt > 0 {
-			// u.rtt = u.rtt*0.8 + float64(rtt)*0.2
-			u.rtt = float64(rtt)
+			if firstSeq < 3 {
+				u.rtt = float64(rtt) // 初始值
+			} else {
+				u.rtt = u.rtt*0.8 + float64(rtt)*0.2
+			}
 			if u.rtt < 50.0 {
 				u.rtt = 50
 			}
@@ -818,7 +821,7 @@ func DialTimeout(network, address string, timeout time.Duration) (net.Conn, erro
 	}
 	id := binary.LittleEndian.Uint64(b[:])
 
-	log.Info("dial new:", id)
+	log.Info("dial new 2:", id)
 
 	dialConnsLock.Lock()
 	if dialConns == nil {
