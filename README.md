@@ -56,6 +56,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
+
 	"github.com/dearplain/penet"
 )
 
