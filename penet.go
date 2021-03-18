@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	mrand "math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -73,10 +74,11 @@ var (
 	ErrClose   = errors.New("conn close")
 	ErrTimeout = errors.New("conn timeout")
 
-	mss         uint32 = 1200
-	defaultRate uint32 = mss * 3000
-	writeMaxSep        = 5
-	resendLimit bool   = true
+	mss         uint32  = 1200
+	defaultRate uint32  = mss * 3000
+	dropRate    float64 = 0.0
+	writeMaxSep         = 5
+	resendLimit bool    = true
 )
 
 func NewUdpSend(conn *Conn, id uint64, sock *net.UDPConn, remote *net.UDPAddr, name string) *UdpSend {
@@ -96,9 +98,9 @@ func NewUdpSend(conn *Conn, id uint64, sock *net.UDPConn, remote *net.UDPAddr, n
 		sendList: list.New(),
 		writable: make(chan bool, 1),
 		name:     name,
-		recvWnd:  1000,
 	}
 	u.writeMax = int(u.rate/u.mss) / writeMaxSep // fixed bug: 初始化  修复bug: 写入太多，应该一点点写
+	u.recvWnd = uint32(u.writeMax)
 	return u
 }
 
@@ -227,11 +229,28 @@ func (u *UdpSend) send(nowTime time.Time, buf []byte) {
 	}
 }
 
+func testDrop() bool {
+	if dropRate < 0.01 {
+		return false
+	}
+	var v uint32
+	var b [4]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		v = mrand.Uint32()
+	} else {
+		v = binary.BigEndian.Uint32(b[:])
+	}
+	if v%1000 < uint32(dropRate*1000) {
+		return true
+	}
+	return false
+}
+
 func (u *UdpSend) recv(buf []byte) {
 
-	// if rand.Intn(5) == 0 {
-	// 	return
-	// }
+	if testDrop() {
+		return
+	}
 
 	now := uint32(time.Now().UnixNano() / int64(time.Millisecond))
 
@@ -412,6 +431,7 @@ func NewUdpRecv(conn *Conn, id uint64, sock *net.UDPConn, remote *net.UDPAddr, n
 		readable: make(chan byte, 1),
 		isNew:    50,
 		name:     name,
+		sndWnd:   1000,
 	}
 }
 
@@ -421,7 +441,6 @@ func (u *UdpRecv) SetReadDeadline(t time.Time) {
 
 func (u *UdpRecv) sendAck(nowTime time.Time, buf []byte) {
 
-	const recvWnd = 1000
 	u.recvListLock.Lock()
 	for {
 		if d, ok := u.seqData[u.acked+1]; ok {
@@ -486,7 +505,7 @@ func (u *UdpRecv) sendAck(nowTime time.Time, buf []byte) {
 			binary.BigEndian.PutUint32(b[n:], d.Seq)
 			n += 4
 			if n >= len(b) {
-				wnd := recvWnd - recvListLen - len(u.seqData)
+				wnd := int(u.sndWnd) - recvListLen - len(u.seqData)
 				if wnd < 0 {
 					wnd = 0
 				}
@@ -502,7 +521,7 @@ func (u *UdpRecv) sendAck(nowTime time.Time, buf []byte) {
 		d.AckCnt++
 	}
 	if n > 0 || u.isRecved { // 修复bug: 一直发数据  修复bug: 有时候发多一条数据
-		wnd := recvWnd - recvListLen - len(u.seqData)
+		wnd := int(u.sndWnd) - recvListLen - len(u.seqData)
 		if wnd < 0 {
 			wnd = 0
 		}
@@ -539,14 +558,19 @@ func after(seq1, seq2 uint32) bool {
 
 func (u *UdpRecv) recv(buf []byte) {
 
+	if testDrop() {
+		return
+	}
+
 	u.isRecved = true
 	u.recvCnt++
-	// ack包:  type0 flag1 id2 len3 tm4 rcvwnd5 acked6
+	// data包:  type0 flag1 id2 len3 seq4 tm5 sndwnd6
 	head, headLen := structUnPack(buf, "BBQHIII")
 	if head[0] == uint64(TypeData) {
 
 		seq := uint32(head[4])
 		u.lastTm = uint32(head[5])
+		u.sndWnd = uint32(head[6])
 
 		log.Debug(u.Id, " recv seq: ", seq, " len: ", u.dataList.Len())
 
@@ -579,6 +603,12 @@ func (u *UdpRecv) recv(buf []byte) {
 
 func SetRate(rate uint32) {
 	defaultRate = rate
+}
+
+func SetDropRate(rate float64) {
+	if rate > 0.001 {
+		dropRate = rate
+	}
 }
 
 type Conn struct {
@@ -821,7 +851,7 @@ func DialTimeout(network, address string, timeout time.Duration) (net.Conn, erro
 	}
 	id := binary.LittleEndian.Uint64(b[:])
 
-	log.Info("dial new 2:", id)
+	log.Info("dial new 3:", id)
 
 	dialConnsLock.Lock()
 	if dialConns == nil {

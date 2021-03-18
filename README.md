@@ -38,7 +38,7 @@
 
 ## 注意事项
 
-- 默认的参数不一定适合所有人。
+- 默认的参数不一定适合所有人。penet.SetRate可以设置每秒发送的最大的字节。
 
 ## 例子
 
@@ -94,4 +94,13 @@ func main() {
 	}
 }
 ```
+
+## 测试
+
+test/ben/ben.go 可测试&验证顺序性、正确性和benmark速度。penet.SetRate调整速度，penet.SetDropRate调整丢包率。
+
+## TODO
+
+- [ ] 慢启动
+- [ ] 速度探测
 

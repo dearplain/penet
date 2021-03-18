@@ -1,4 +1,4 @@
-package penet
+package main
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/dearplain/penet"
 	"github.com/siddontang/go/log"
 )
 
@@ -19,7 +20,7 @@ func setupPProf() {
 	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	if err := http.ListenAndServe("127.0.0.1:9083", r); err != nil {
-		fmt.Println(err)
+		log.Error(err)
 	}
 }
 
@@ -27,11 +28,12 @@ func main() {
 
 	go setupPProf()
 
-	// SetRate(1200 * 5000)
+	penet.SetRate(30 * 1024 * 1024) // 设置最大速度为10Mbyte/s
+	// penet.SetDropRate(0.1)          // 设置10%丢包率（接收和发送），用于测试
 
-	listener, err := Listen("", ":8070")
+	listener, err := penet.Listen("", ":8070")
 	if err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		return
 	}
 
@@ -39,15 +41,14 @@ func main() {
 	var sendNum = 10000
 	var sendTotal = sendSize * sendNum
 	go func() {
-		conn, err := Dial("", "127.0.0.1:8070")
+		conn, err := penet.Dial("", "127.0.0.1:8070")
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			return
 		}
 
 		var start = time.Now()
 		var total = 0
-		// data := []byte("ok-------------------")
 		data := make([]byte, sendSize)
 		j := 0
 		for i := 0; i < sendNum; i++ {
@@ -66,24 +67,13 @@ func main() {
 			}
 		}
 		conn.Close()
-		log.Info("write close", "total:", total, time.Since(start))
-		// conn.Write([]byte("hello--------------"))
-		// var b = make([]byte, 128)
-		// n, _ := conn.Read(b)
-		// fmt.Println(string(b[:n]))
+		log.Info("write close ", "total:", total, time.Since(start))
 	}()
-
-	// go func() {
-	// 	for i := 0; i < 50000; i++ {
-	// 		Dial("", "127.0.0.1:8070")
-	// 		// conn.Write([]byte(`hello`))
-	// 	}
-	// }()
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			return
 		}
 		log.Info("accept conn", conn)
@@ -93,7 +83,7 @@ func main() {
 			j := 0
 			now := time.Now()
 			start := now
-			var b = make([]byte, 2048)
+			var b = make([]byte, 4086)
 			for {
 				n, err := conn.Read(b)
 				if n <= 0 || err != nil {
@@ -108,24 +98,19 @@ func main() {
 					}
 				}
 				total += n
-				// fmt.Println("read:", n, string(b[:n]))
 				if total-preTotal > 5000000 {
-					preTotal = total
 					curNow := time.Now()
-					// elsap := ((curNow.UnixNano() - now.UnixNano())
-					// rate := 10000 / elsap / int64(time.Millisecond)) * 1000
-					log.Info("read:", total, time.Since(now))
+					elsap := curNow.UnixNano() - now.UnixNano()
+					rate := float64(total-preTotal) / float64(elsap) * float64(time.Second) / float64(1024*1024)
+					log.Infof("read: %d, %v, %.2fMB/s", total, time.Since(now), rate)
 					now = curNow
+					preTotal = total
 				}
 				if total >= sendTotal {
 					log.Info("read end:", total, time.Since(start))
 				}
 			}
 			log.Info("read total:", total)
-			// conn.Write([]byte("ok-------------------"))
-			// var b = make([]byte, 128)
-			// n, _ := conn.Read(b)
-			// fmt.Println(string(b[:n]))
 		}(conn)
 	}
 
