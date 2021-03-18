@@ -4,11 +4,13 @@
 
 发送包
 
-| package type(1) | data type(1) | id(8) | body len(2) | seq(4) | timestamp(4) | wnd(4) | data ... |
+| package type(1) | data type(1) | id(8) | body len(2) | seq(4) | timestamp(4) | wnd(4) | ... (real data) |
+|---|---|---|---|---|---|---|---|
 
 回复包
 
-| package type(1) | data type(1) | id(8) | body len(2) | timestamp(4) | wnd(4) | acked_seq(4) | ack seq1(4) | ack seq2 (4) | ...
+| package type(1) | data type(1) | id(8) | body len(2) | timestamp(4) | wnd(4) | acked_seq(4) | ack seq1(4) | ack seq2 (4) | ... ack seq n (4) |
+|---|---|---|---|---|---|---|---|---|---|
 
 ## 特点
 
@@ -46,7 +48,7 @@
 
 加速&兼容各种手机端梯子：
 
-手机端科学上网软件(tcp) -> 国内转换服务器(tcp转penet) --> 国外fast-shadowsocks服务器(penet)
+手机端科学上网软件(shadowsocks，比如Outline/SuperWingy/小火箭，tcp) --> 国内转换服务器(tcp转penet) --> 国外fast-shadowsocks服务器(penet)
 
 国内转换服务器代码：
 ```go

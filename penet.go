@@ -9,7 +9,6 @@ import (
 	mrand "math/rand"
 	"net"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -927,8 +926,6 @@ func (c *Conns) loop() {
 	// 只起一个timer，给所有conn发
 	// 之前用setreaddeadline这个不太好，容易出现长时间没超时
 
-	runtime.LockOSThread()
-
 	log.Info("loop: ", c.isDial)
 
 	go func() {
@@ -1048,7 +1045,6 @@ func (c *Conns) loop() {
 }
 
 func (c *Conns) runTimer(rnd uint32) {
-	// runtime.LockOSThread()
 	for {
 		time.Sleep(20 * time.Millisecond)
 		// C.usleep(20 * 1000)

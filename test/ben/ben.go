@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dearplain/penet"
+	// penet "net"
 	"github.com/siddontang/go/log"
 )
 
@@ -28,10 +29,10 @@ func main() {
 
 	go setupPProf()
 
-	penet.SetRate(30 * 1024 * 1024) // 设置最大速度为10Mbyte/s
+	penet.SetRate(30 * 1024 * 1024) // 设置最大速度为30Mbyte/s
 	// penet.SetDropRate(0.1)          // 设置10%丢包率（接收和发送），用于测试
 
-	listener, err := penet.Listen("", ":8070")
+	listener, err := penet.Listen("tcp", ":8070")
 	if err != nil {
 		log.Error(err)
 		return
@@ -41,7 +42,7 @@ func main() {
 	var sendNum = 10000
 	var sendTotal = sendSize * sendNum
 	go func() {
-		conn, err := penet.Dial("", "127.0.0.1:8070")
+		conn, err := penet.Dial("tcp", "127.0.0.1:8070")
 		if err != nil {
 			log.Error(err)
 			return
@@ -107,7 +108,10 @@ func main() {
 					preTotal = total
 				}
 				if total >= sendTotal {
-					log.Info("read end:", total, time.Since(start))
+					curNow := time.Now()
+					elsap := curNow.UnixNano() - start.UnixNano()
+					rate := float64(total) / float64(elsap) * float64(time.Second) / float64(1024*1024)
+					log.Infof("read end: %d, %v, %.2fMB/s", total, time.Since(start), rate)
 				}
 			}
 			log.Info("read total:", total)
